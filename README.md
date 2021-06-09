@@ -7,6 +7,8 @@
 
 Versatile type-safe task queueing library for recurring user-editable tasks.
 
+![](https://raw.githubusercontent.com/jeanlescure/queueon/main/assets/queueon-task-status-cycle.png)
+
 # Development
 
 ```
