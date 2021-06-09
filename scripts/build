@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+rm -rf dist/*
+mkdir -p dist
+
+tsc -noEmit \
+  && esbuild src/index.ts --bundle --sourcemap --target=chrome51,firefox53,safari11,edge79 \
+    --outfile=dist/queueon.js \
+  && esbuild src/index.ts --bundle --minify --sourcemap --target=chrome51,firefox53,safari11,edge79 \
+    --outfile=dist/queueon.min.js

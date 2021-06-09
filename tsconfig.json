@@ -1,0 +1,24 @@
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "moduleResolution": "node",
+    "sourceMap": true,
+    "importHelpers": true,
+    "downlevelIteration": true,
+    "allowJs": false,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "src/*.ts",
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
+}

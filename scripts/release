@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+./scripts/test \
+  && ./scripts/build \
+  && standard-version \
+  && git push --follow-tags origin main \
+  && npm publish
