@@ -1,8 +1,8 @@
 type milliseconds = number;
 
-export type QueueonTaskId = string;
+export type RTQTaskId = string;
 
-export enum QueueonStatus {
+export enum RTQStatus {
   NEW = 'NEW',
   QUEUED = 'QUEUED',
   INITIATED = 'INITIATED',
@@ -10,14 +10,14 @@ export enum QueueonStatus {
   IN_PROGRESS = 'IN_PROGRESS',
   FAILED = 'FAILED',
   AWAITING_RETRY = 'AWAITING_RETRY',
+  AWAITING_NEXT_RUN = 'AWAITING_NEXT_RUN',
   SUCCEEDED = 'SUCCEEDED',
 }
 
-export interface QueueonTask<O> {
-  id: QueueonTaskId;
-  status: QueueonStatus;
+export interface RTQTask<O = {}> {
+  id: RTQTaskId;
+  status: RTQStatus;
   waitTimeBetweenRuns: milliseconds;
-  timeout: milliseconds;
   taskName: string;
   maxRetries: number;
   retryCount: number;
@@ -25,16 +25,16 @@ export interface QueueonTask<O> {
   taskOptions: O;
 }
 
-export interface QueueonQueueEntry {
+export interface RTQQueueEntry {
   id: string;
-  taskId: QueueonTaskId;
+  taskId: RTQTaskId;
   queuedAt: Date;
 }
 
-export interface QueueonLogEntry {
+export interface RTQLogEntry {
   timestamp: Date;
   action: string;
   triggeredBy: string;
 }
 
-// Run if: (lastRun) > minMsBetweenRuns 
+export type RTQTaskHandler<O = {}> = (taskOptions: O) => Promise<void>;

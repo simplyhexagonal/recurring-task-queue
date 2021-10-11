@@ -5,7 +5,7 @@
 ![Compatible with Safari versions 11+](https://img.shields.io/badge/Safari-11%2B-brightgreen)
 ![Compatible with Edge versions 79+](https://img.shields.io/badge/Edge-79%2B-brightgreen)
 
-Versatile type-safe task queueing library for recurring user-editable tasks.
+Versatile type-safe queueing library for a finite set of recurring user-editable tasks.
 
 ![](https://raw.githubusercontent.com/jeanlescure/queueon/main/assets/queueon-task-status-cycle.png)
 

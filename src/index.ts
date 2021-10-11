@@ -1,42 +1,50 @@
 import {
-  QueueonLogEntry,
-  QueueonQueueEntry,
-  QueueonStatus,
-  QueueonTask,
-  QueueonTaskId,
+  RTQLogEntry,
+  RTQQueueEntry,
+  RTQStatus,
+  RTQTask,
+  RTQTaskHandler,
 } from "./interfaces";
 
-interface QueueonOptions {
-  fetchTasks: <O>() => Promise<QueueonTask<O>[]>;
-  updateTask: <O>(task: QueueonTask<O>) => Promise<void>;
-  createQueueEntry: (queueEntry: QueueonQueueEntry) => Promise<void>;
-  fetchQueueEntries: () => Promise<QueueonQueueEntry[]>;
-  removeQueueEntry: (queueEntry: QueueonQueueEntry) => Promise<void>;
-  logAction: (logEntry: QueueonLogEntry) => Promise<void>;
-  taskHandlers: {[k: string]: <O>(taskOptions: O) => Promise<void>};
+interface RTQOptions {
+  fetchTasks: () => Promise<RTQTask[]>;
+  updateTask: (task: RTQTask) => Promise<void>;
+  createQueueEntry: (queueEntry: RTQQueueEntry) => Promise<void>;
+  fetchQueueEntries: () => Promise<RTQQueueEntry[]>;
+  removeQueueEntry: (queueEntry: RTQQueueEntry) => Promise<void>;
+  logAction: (logEntry: RTQLogEntry) => Promise<void>;
+  taskHandlers: {[k: string]: RTQTaskHandler};
   maxConcurrentTasks?: number;
 }
 
-const defaultOptions: Partial<QueueonOptions> = {
+const defaultOptions: Partial<RTQOptions> = {
   maxConcurrentTasks: 0,
 }
 
-export default class Queueon {
-  options: QueueonOptions;
+export default class RTQ {
+  options: RTQOptions;
   runningTasks: number = 0;
   
-  constructor(options: QueueonOptions) {
+  constructor(options: RTQOptions) {
     this.options = {
       ...defaultOptions,
       ...options,
     };
   }
 
-  async changeTaskStatus(
-    task: QueueonTask<unknown>,
-    status: QueueonStatus,
-    triggeredBy?: string,
-  ) {
+  async changeTaskStatus({
+    task,
+    status,
+    triggeredBy,
+    retryCount,
+    lastRun,
+  }: {
+    task: RTQTask<unknown>;
+    status: RTQStatus;
+    triggeredBy?: string;
+    retryCount?: number;
+    lastRun?: Date;
+  }) {
     const {
       options: {
         updateTask,
@@ -44,88 +52,135 @@ export default class Queueon {
       },
     } = this;
 
-    await updateTask({
+    const updatedTask = {
       ...task,
-    })
+      status,
+      retryCount: retryCount || task.retryCount,
+      lastRun: lastRun || task.lastRun,
+    };
+
+    return await updateTask(updatedTask)
       .then(() => {
         logAction({
           timestamp: new Date(),
-          action: '', // Changed status to ...
-          triggeredBy: '', // Queueon
+          action: `changed status of ${task.taskName} to ${status}`,
+          triggeredBy: triggeredBy || 'RTQ',
         });
+
+        return updatedTask;
       })
       .catch(() => {
         logAction({
           timestamp: new Date(),
-          action: '', // Failed changing status to ...
-          triggeredBy: '', // Queueon
+          action: `failed changing status of ${task.taskName} to ${status}`,
+          triggeredBy: triggeredBy || 'RTQ',
         });
+
+        return task;
       });
   }
 
   async queueTask(
-    task: QueueonTask<unknown>,
+    task: RTQTask<unknown>,
     index: number,
-    taskArray: QueueonTask<unknown>[]
+    taskArray: RTQTask<unknown>[]
   ) {
     const {
       options: {
         createQueueEntry,
       },
-      changeTaskStatus,
     } = this;
 
     await createQueueEntry({
-      id: '',
+      id: task.id,
       taskId: task.id,
       queuedAt: new Date(),
     });
 
-    await changeTaskStatus
-    // status: queued
+    await this.changeTaskStatus({
+      task,
+      status: RTQStatus.QUEUED,
+    });
   }
 
   async processTask(
-    task: QueueonTask<unknown>,
+    task: RTQTask<unknown>,
     index: number,
-    taskArray: QueueonTask<unknown>[]
+    taskArray: RTQTask<unknown>[]
   ) {
     this.runningTasks += 1;
 
     const {
       taskName,
       taskOptions,
+      lastRun,
+      waitTimeBetweenRuns,
+      retryCount: taskRetryCount,
+      maxRetries,
     } = task;
 
-    // if - < waitTimeBetweenRuns return;
+    const msSinceLastRun = (Date.now().valueOf() - lastRun.valueOf());
+
+    if (msSinceLastRun < waitTimeBetweenRuns) {
+      await this.changeTaskStatus({
+        task: task,
+        status: RTQStatus.AWAITING_RETRY,
+      });
+
+      return;
+    }
 
     const {
       options: {
         taskHandlers,
       },
-      changeTaskStatus,
     } = this;
 
-    // Determine initiated, retried or failed
+    let status = RTQStatus.INITIATED;
+    let retryCount = taskRetryCount;
 
-    await changeTaskStatus
-    // status: initiated, retried or failed
+    if (retryCount > 0) {
+      status = RTQStatus.RETRIED;
+      retryCount += 1;
+    }
 
-    // if not failed
-    await changeTaskStatus
-    // status: in progress
+    let upToDateTask = task;
+
+    upToDateTask = await this.changeTaskStatus({
+      task: upToDateTask,
+      status,
+      retryCount,
+    });
+
+    upToDateTask = await this.changeTaskStatus({
+      task: upToDateTask,
+      status: RTQStatus.IN_PROGRESS,
+      lastRun: new Date(),
+    });
 
     taskHandlers[taskName](taskOptions)
       .then(async () => {
-        await changeTaskStatus
-        // status: succeeded
+        upToDateTask = await this.changeTaskStatus({
+          task: upToDateTask,
+          status: RTQStatus.SUCCEEDED,
+          retryCount: 0,
+        });
       })
       .catch(async () => {
-        // if < maxRetries
-        await changeTaskStatus
-        // status: awaiting retry
+        let status = RTQStatus.AWAITING_RETRY;
+
+        if (retryCount >= maxRetries) {
+          status = RTQStatus.FAILED;
+        }
+
+        upToDateTask = await this.changeTaskStatus({
+          task: upToDateTask,
+          status,
+        });
       })
-      .finally(() => {});
+      .finally(() => {
+        this.runningTasks -= 1;
+      });
   }
 
   async tick() {
@@ -135,6 +190,7 @@ export default class Queueon {
         fetchQueueEntries,
         removeQueueEntry,
         maxConcurrentTasks,
+        logAction,
       }
     } = this;
 
@@ -150,49 +206,33 @@ export default class Queueon {
       }
 
       return a;
-    }, [] as QueueonQueueEntry[]);
+    }, [] as RTQQueueEntry[]);
 
-    await Promise.all(filteredEntries.map(async (q) => await removeQueueEntry(q)));
+    await Promise.all(
+      filteredEntries.map(
+        async (q) => await removeQueueEntry(q).catch((e) => logAction({
+          timestamp: new Date(),
+          action: `failed removing queue entry ${q.id} from queue`,
+          triggeredBy: 'RTQ',
+        }))
+      )
+    );
 
-    const queuedTasks = filteredEntries.map((qe) => tasks.find((t) => t.id === qe.taskId));
+    const tasksReadyToProcess = filteredEntries.map(
+      (qe) => tasks.find((t) => t.id === qe.taskId)
+    );
 
-    queuedTasks.map(this.processTask).forEach((p) => p.finally(() => this.runningTasks -= 1));
+    tasksReadyToProcess.map(
+      (t, i, a) => this.processTask(t, i, a)
+    );
 
     tasks = await fetchTasks();
-    tasks.filter(
+    await Promise.all(tasks.filter(
       (t) => (
-        t.status === QueueonStatus.NEW
-        || t.status === QueueonStatus.AWAITING_RETRY
-        || t.status === QueueonStatus.SUCCEEDED
+        t.status === RTQStatus.NEW
+        || t.status === RTQStatus.AWAITING_RETRY
+        || t.status === RTQStatus.SUCCEEDED
       )
-    ).forEach(this.queueTask);
-  }
-
-  stop(
-    taskId: QueueonTaskId,
-    triggeredBy: string,
-  ) {
-    //...
-  }
-
-  abandon(
-    taskId: QueueonTaskId,
-    triggeredBy: string,
-  ) {
-    //...
-  }
-
-  delete(
-    taskId: QueueonTaskId,
-    triggeredBy: string,
-  ) {
-    //...
-  }
-
-  restart(
-    taskId: QueueonTaskId,
-    triggeredBy: string,
-  ) {
-    //...
+    ).map(async (t, i, a) => await this.queueTask(t, i, a)));
   }
 }
