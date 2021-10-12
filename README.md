@@ -1,5 +1,7 @@
 # Recurring Task Queue
 ![Tests](https://github.com/simplyhexagonal/recurring-task-queue/workflows/tests/badge.svg)
+![Compatible with Typescript versions 4+](https://img.shields.io/badge/Typescript-4%2B-brightgreen)
+![Compatible with Node versions 14+](https://img.shields.io/badge/Node-14%2B-brightgreen)
 
 ![Compatible with Chrome versions 60+](https://img.shields.io/badge/Chrome-60%2B-brightgreen)
 ![Compatible with Firefox versions 60+](https://img.shields.io/badge/Firefox-60%2B-brightgreen)
