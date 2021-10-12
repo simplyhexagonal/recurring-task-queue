@@ -10,7 +10,7 @@
 
 Versatile type-safe queueing library for a finite set of **recurring** user-editable tasks.
 
-![](https://raw.githubusercontent.com/simplyhexagonal/recurring-task-queue/main/assets/task-status-cycle.png)
+![](https://raw.githubusercontent.com/simplyhexagonal/recurring-task-queue/main/assets/task-status-cycle-1.0.png)
 
 ## Open source notice
 
