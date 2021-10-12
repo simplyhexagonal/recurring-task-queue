@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 
 rm -rf dist/*
-mkdir -p dist
-
-tsc -noEmit \
-  && esbuild src/index.ts --bundle --sourcemap --target=chrome51,firefox53,safari11,edge79 \
-    --outfile=dist/queueon.js \
-  && esbuild src/index.ts --bundle --minify --sourcemap --target=chrome51,firefox53,safari11,edge79 \
-    --outfile=dist/queueon.min.js
+esbuild src/index.ts --bundle --target=chrome60,firefox60,safari12,edge18 \
+  --outfile=dist/recurring-task-queue.js --sourcemap --format=iife --global-name=RTQ \
+  && esbuild src/index.ts --bundle --target=chrome60,firefox60,safari12,edge18 \
+  --outfile=dist/recurring-task-queue.min.js --minify --format=iife --global-name=RTQ \
+  && tsc -d --emitDeclarationOnly --rootDir src --outDir dist \
+  && mv dist/index.d.ts dist/recurring-task-queue.d.ts \
+  && refup dist/recurring-task-queue.js RTQ \
+  && refup dist/recurring-task-queue.min.js RTQ \
+  || exit 1

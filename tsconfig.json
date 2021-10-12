@@ -1,8 +1,10 @@
 {
-  "compileOnSave": false,
   "compilerOptions": {
-    "rootDir": "src",
-    "outDir": "dist",
+    "strict": true,
+    "isolatedModules": true,
+    "noFallthroughCasesInSwitch": true,
+    "types": ["node", "jest"],
+    "noImplicitReturns": true,
     "moduleResolution": "node",
     "sourceMap": true,
     "importHelpers": true,
@@ -10,14 +12,15 @@
     "allowJs": false,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
-    "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "skipLibCheck": true
   },
   "include": [
-    "src/*.ts",
+    "src/index.ts",
+    "src/interfaces.ts",
   ],
   "exclude": [
+    "src/*.test.ts",
     "node_modules",
     "dist"
   ]

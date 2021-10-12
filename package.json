@@ -1,16 +1,33 @@
 {
   "name": "@simplyhexagonal/recurring-task-queue",
   "version": "1.0.0",
-  "description": "Versatile type-safe task queueing library for recurring user-editable tasks.",
+  "description": "Versatile type-safe queueing library for a finite set of recurring user-editable tasks..",
   "main": "index.js",
-  "repository": "https://github.com/jeanlescure/queueon",
+  "repository": "https://github.com/simplyhexagonal/recurring-task-queue",
   "author": "Jean M. Lescure",
   "license": "Apache-2.0",
   "scripts": {
+    "dev": "scripty",
     "test": "scripty",
     "build": "scripty",
-    "release": "scripty"
+    "release": "release-it"
   },
+  "release-it": {
+    "git": {
+      "changelog": "auto-changelog --stdout -l false -u -t ./assets/changelog-compact.hbs"
+    },
+    "hooks": {
+      "after:bump": "scripty"
+    },
+    "npm": {
+      "publish": false
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "package.json"
+  ],
   "devDependencies": {
     "@types/jest": "^27.0.1",
     "@types/node": "^16.9.2",
@@ -25,5 +42,8 @@
     "ts-node-dev": "^1.1.8",
     "tslib": "^2.3.1",
     "typescript": "^4.4.3"
+  },
+  "dependencies": {
+    "short-unique-id": "^4.4.4"
   }
 }

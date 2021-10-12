@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
-./scripts/test \
-  && ./scripts/build \
-  && standard-version \
-  && git push --follow-tags origin main \
-  && npm publish
+pnpm build \
+  && git add dist \
+  && git commit -m "chore: build dist for release" \
+  && auto-changelog -p

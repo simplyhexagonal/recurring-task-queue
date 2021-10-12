@@ -2,7 +2,7 @@ type milliseconds = number;
 
 export type RTQTaskId = string;
 
-export enum RTQStatus {
+export enum RTQStatusEnum {
   NEW = 'NEW',
   QUEUED = 'QUEUED',
   INITIATED = 'INITIATED',
@@ -14,9 +14,9 @@ export enum RTQStatus {
   SUCCEEDED = 'SUCCEEDED',
 }
 
-export interface RTQTask<O = {}> {
+export interface RTQTask<O extends unknown> {
   id: RTQTaskId;
-  status: RTQStatus;
+  status: RTQStatusEnum;
   waitTimeBetweenRuns: milliseconds;
   taskName: string;
   maxRetries: number;
@@ -34,7 +34,8 @@ export interface RTQQueueEntry {
 export interface RTQLogEntry {
   timestamp: Date;
   action: string;
+  reason: string;
   triggeredBy: string;
 }
 
-export type RTQTaskHandler<O = {}> = (taskOptions: O) => Promise<void>;
+export type RTQTaskHandler<O extends unknown> = (taskOptions: O) => Promise<void>;

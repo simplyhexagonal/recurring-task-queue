@@ -1,46 +1,64 @@
+import ShortUniqueId from 'short-unique-id';
+
 import {
   RTQLogEntry,
   RTQQueueEntry,
-  RTQStatus,
+  RTQStatusEnum,
   RTQTask,
   RTQTaskHandler,
 } from "./interfaces";
 
+export * from "./interfaces";
+
+export const RTQStatus = {...RTQStatusEnum};
+
+type RTQCustomErrorHandler = (error: any) => Promise<void>;
+
 interface RTQOptions {
-  fetchTasks: () => Promise<RTQTask[]>;
-  updateTask: (task: RTQTask) => Promise<void>;
+  fetchTasks: () => Promise<RTQTask<unknown>[]>;
+  updateTask: (task: RTQTask<unknown>) => Promise<void>;
   createQueueEntry: (queueEntry: RTQQueueEntry) => Promise<void>;
   fetchQueueEntries: () => Promise<RTQQueueEntry[]>;
   removeQueueEntry: (queueEntry: RTQQueueEntry) => Promise<void>;
   logAction: (logEntry: RTQLogEntry) => Promise<void>;
-  taskHandlers: {[k: string]: RTQTaskHandler};
+  taskHandlers: {[k: string]: RTQTaskHandler<unknown>};
+  errorHandler?: RTQCustomErrorHandler;
   maxConcurrentTasks?: number;
 }
 
 const defaultOptions: Partial<RTQOptions> = {
   maxConcurrentTasks: 0,
+  errorHandler: async (e) => console.log(e),
 }
 
 export default class RTQ {
+  static RTQStatus = RTQStatus;
+
   options: RTQOptions;
   runningTasks: number = 0;
+  uid: ShortUniqueId;
+  ticking: boolean = false;
   
   constructor(options: RTQOptions) {
     this.options = {
       ...defaultOptions,
       ...options,
     };
+
+    this.uid = new ShortUniqueId();
   }
 
   async changeTaskStatus({
     task,
     status,
+    reason,
     triggeredBy,
     retryCount,
     lastRun,
   }: {
     task: RTQTask<unknown>;
-    status: RTQStatus;
+    status: RTQStatusEnum;
+    reason?: string;
     triggeredBy?: string;
     retryCount?: number;
     lastRun?: Date;
@@ -49,6 +67,7 @@ export default class RTQ {
       options: {
         updateTask,
         logAction,
+        errorHandler,
       },
     } = this;
 
@@ -64,19 +83,23 @@ export default class RTQ {
         logAction({
           timestamp: new Date(),
           action: `changed status of ${task.taskName} to ${status}`,
+          reason: reason || '',
           triggeredBy: triggeredBy || 'RTQ',
-        });
+        }).catch(errorHandler);
 
         return updatedTask;
       })
-      .catch(() => {
+      .catch((e) => {
+        (errorHandler as RTQCustomErrorHandler)(e);
+
         logAction({
           timestamp: new Date(),
           action: `failed changing status of ${task.taskName} to ${status}`,
+          reason: reason || '',
           triggeredBy: triggeredBy || 'RTQ',
-        });
+        }).catch(errorHandler);
 
-        return task;
+        return null;
       });
   }
 
@@ -88,16 +111,26 @@ export default class RTQ {
     const {
       options: {
         createQueueEntry,
+        errorHandler,
       },
     } = this;
 
-    await createQueueEntry({
-      id: task.id,
+    const result = await createQueueEntry({
+      id: this.uid.stamp(16),
       taskId: task.id,
       queuedAt: new Date(),
-    });
+    }).catch(
+      (e) => {
+        (errorHandler as RTQCustomErrorHandler)(e);
+        return null;
+      }
+    );
 
-    await this.changeTaskStatus({
+    if (result === null) {
+      return null;
+    }
+
+    return await this.changeTaskStatus({
       task,
       status: RTQStatus.QUEUED,
     });
@@ -133,6 +166,7 @@ export default class RTQ {
     const {
       options: {
         taskHandlers,
+        errorHandler,
       },
     } = this;
 
@@ -141,10 +175,9 @@ export default class RTQ {
 
     if (retryCount > 0) {
       status = RTQStatus.RETRIED;
-      retryCount += 1;
     }
 
-    let upToDateTask = task;
+    let upToDateTask: RTQTask<unknown> | null = task;
 
     upToDateTask = await this.changeTaskStatus({
       task: upToDateTask,
@@ -152,30 +185,46 @@ export default class RTQ {
       retryCount,
     });
 
+    if (upToDateTask === null) {
+      return;
+    }
+
     upToDateTask = await this.changeTaskStatus({
       task: upToDateTask,
       status: RTQStatus.IN_PROGRESS,
       lastRun: new Date(),
     });
 
+    if (upToDateTask === null) {
+      return;
+    }
+
     taskHandlers[taskName](taskOptions)
       .then(async () => {
         upToDateTask = await this.changeTaskStatus({
-          task: upToDateTask,
+          task: (upToDateTask as RTQTask<unknown>),
           status: RTQStatus.SUCCEEDED,
           retryCount: 0,
         });
       })
-      .catch(async () => {
+      .catch(async (e) => {
+        if (errorHandler) {
+          errorHandler(e).catch(console.log);
+        }
+
         let status = RTQStatus.AWAITING_RETRY;
 
         if (retryCount >= maxRetries) {
           status = RTQStatus.FAILED;
         }
 
+        retryCount += 1;
+
         upToDateTask = await this.changeTaskStatus({
-          task: upToDateTask,
+          task: (upToDateTask as RTQTask<unknown>),
           status,
+          retryCount,
+          reason: e.message || JSON.stringify(e),
         });
       })
       .finally(() => {
@@ -184,6 +233,12 @@ export default class RTQ {
   }
 
   async tick() {
+    if (this.ticking) {
+      return;
+    }
+
+    this.ticking = true;
+
     const {
       options: {
         fetchTasks,
@@ -191,17 +246,26 @@ export default class RTQ {
         removeQueueEntry,
         maxConcurrentTasks,
         logAction,
+        errorHandler,
       }
     } = this;
 
-    let tasks = await fetchTasks();
+    let tasks = await fetchTasks().catch(errorHandler) as RTQTask<unknown>[];
 
-    const queueEntries = (await fetchQueueEntries() || []).sort(function(a, b){
+    if (!Array.isArray(tasks)) {
+      return;
+    }
+
+    const queueEntries = await fetchQueueEntries().catch(errorHandler);
+
+    if (!Array.isArray(queueEntries)) {
+      return;
+    }
+
+    const filteredEntries = queueEntries.sort((a, b) => {
       return (new Date(b.queuedAt).getTime()) - (new Date(a.queuedAt).getTime());
-    });
-
-    const filteredEntries = queueEntries.reduce((a, b) => {
-      if (maxConcurrentTasks === 0 || a.length < maxConcurrentTasks) {
+    }).reduce((a, b) => {
+      if (maxConcurrentTasks === 0 || a.length < (maxConcurrentTasks as number)) {
         a.push(b);
       }
 
@@ -210,29 +274,66 @@ export default class RTQ {
 
     await Promise.all(
       filteredEntries.map(
-        async (q) => await removeQueueEntry(q).catch((e) => logAction({
-          timestamp: new Date(),
-          action: `failed removing queue entry ${q.id} from queue`,
-          triggeredBy: 'RTQ',
-        }))
+        async (q) => await removeQueueEntry(q).catch((e) => {
+          (errorHandler as RTQCustomErrorHandler)(e);
+
+          logAction({
+            timestamp: new Date(),
+            action: `failed removing queue entry ${q.id} from queue`,
+            reason: e.message || JSON.stringify(e),
+            triggeredBy: 'RTQ',
+          }).catch(errorHandler);
+        })
       )
-    );
+    ).catch(errorHandler);
 
     const tasksReadyToProcess = filteredEntries.map(
       (qe) => tasks.find((t) => t.id === qe.taskId)
     );
 
-    tasksReadyToProcess.map(
+    const numOfTasksProcessed = tasksReadyToProcess.length;
+
+    (tasksReadyToProcess as RTQTask<unknown>[]).forEach(
       (t, i, a) => this.processTask(t, i, a)
     );
 
-    tasks = await fetchTasks();
-    await Promise.all(tasks.filter(
+    tasks = await fetchTasks().catch(errorHandler) as RTQTask<{}>[];
+
+    if (!Array.isArray(tasks)) {
+      return;
+    }
+
+    const tasksToBeQueued = tasks.filter(
+      (t) => (
+        (tasksReadyToProcess as RTQTask<unknown>[]).findIndex((tp) => t.id === tp.id) < 0
+      )
+    ).filter(
       (t) => (
         t.status === RTQStatus.NEW
         || t.status === RTQStatus.AWAITING_RETRY
         || t.status === RTQStatus.SUCCEEDED
       )
-    ).map(async (t, i, a) => await this.queueTask(t, i, a)));
+    );
+
+    await Promise.all(
+      tasksToBeQueued.map(
+        async (t, i, a) => await this.queueTask(t, i, a).catch(
+          (e) => {
+            (errorHandler as RTQCustomErrorHandler)(e);
+            return null;
+          }
+        )
+      )
+    ).then((a) => {
+      this.ticking = false;
+
+      if (
+        numOfTasksProcessed < 1
+        && tasksToBeQueued.length > 0
+        && !a.includes(null)
+      ) {
+        this.tick();
+      }
+    }).catch(errorHandler);
   }
 }

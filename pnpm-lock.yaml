@@ -9,11 +9,15 @@ specifiers:
   refup: ^1.1.0
   release-it: ^14.11.5
   scripty: ^2.0.0
+  short-unique-id: ^4.4.4
   ts-jest: ^27.0.5
   ts-node: ^10.2.1
   ts-node-dev: ^1.1.8
   tslib: ^2.3.1
   typescript: ^4.4.3
+
+dependencies:
+  short-unique-id: 4.4.4
 
 devDependencies:
   '@types/jest': 27.0.2
@@ -3670,6 +3674,11 @@ packages:
       interpret: 1.4.0
       rechoir: 0.6.2
     dev: true
+
+  /short-unique-id/4.4.4:
+    resolution: {integrity: sha512-oLF1NCmtbiTWl2SqdXZQbo5KM1b7axdp0RgQLq8qCBBLoq+o3A5wmLrNM6bZIh54/a8BJ3l69kTXuxwZ+XCYuw==}
+    hasBin: true
+    dev: false
 
   /side-channel/1.0.4:
     resolution: {integrity: sha512-q5XPytqFEIKHkGdiMIrY10mvLRvnQh42/+GoBlFW3b2LXLE2xxJpZFdm94we0BaoV3RwJyGqg5wS7epxTv0Zvw==}
