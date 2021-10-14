@@ -74,7 +74,7 @@ var RTQ = (() => {
           DEFAULT_UUID_LENGTH: () => DEFAULT_UUID_LENGTH,
           default: () => ShortUniqueId3
         });
-        var version = "4.4.4";
+        var version2 = "4.4.4";
         var DEFAULT_UUID_LENGTH = 6;
         var DEFAULT_OPTIONS = {
           dictionary: "alphanum",
@@ -232,7 +232,7 @@ var RTQ = (() => {
             this.counter = 0;
             this.debug = false;
             this.dict = [];
-            this.version = version;
+            this.version = version2;
             const {
               dictionary,
               shuffle,
@@ -259,9 +259,12 @@ var RTQ = (() => {
   // src/index.ts
   var src_exports = {};
   __export(src_exports, {
+    RTQAction: () => RTQAction,
+    RTQActionEnum: () => RTQActionEnum,
     RTQStatus: () => RTQStatus,
     RTQStatusEnum: () => RTQStatusEnum,
-    default: () => RTQ
+    default: () => RTQ,
+    version: () => version
   });
   var import_short_unique_id = __toModule(require_short_unique_id());
 
@@ -278,9 +281,18 @@ var RTQ = (() => {
     RTQStatusEnum2["AWAITING_NEXT_RUN"] = "AWAITING_NEXT_RUN";
     RTQStatusEnum2["SUCCEEDED"] = "SUCCEEDED";
   })(RTQStatusEnum || (RTQStatusEnum = {}));
+  var RTQActionEnum;
+  (function(RTQActionEnum2) {
+    RTQActionEnum2["MODIFY_TASK_STATUS"] = "MODIFY_TASK_STATUS";
+    RTQActionEnum2["MODIFY_QUEUE"] = "MODIFY_QUEUE";
+  })(RTQActionEnum || (RTQActionEnum = {}));
+
+  // package.json
+  var version = "1.0.0";
 
   // src/index.ts
   var RTQStatus = __spreadValues({}, RTQStatusEnum);
+  var RTQAction = __spreadValues({}, RTQActionEnum);
   var defaultOptions = {
     maxConcurrentTasks: 0,
     errorHandler: async (e) => console.log(e)
@@ -292,7 +304,7 @@ var RTQ = (() => {
       this.options = __spreadValues(__spreadValues({}, defaultOptions), options);
       this.uid = new import_short_unique_id.default();
     }
-    async changeTaskStatus({
+    async modifyTaskStatus({
       task,
       status,
       reason,
@@ -303,7 +315,7 @@ var RTQ = (() => {
       const {
         options: {
           updateTask,
-          logAction,
+          eventHandler,
           errorHandler
         }
       } = this;
@@ -313,19 +325,33 @@ var RTQ = (() => {
         lastRun: lastRun || task.lastRun
       });
       return await updateTask(updatedTask).then(() => {
-        logAction({
+        eventHandler({
           timestamp: new Date(),
-          action: `changed status of ${task.taskName} to ${status}`,
+          action: RTQAction.MODIFY_TASK_STATUS,
+          message: `changed status of ${task.taskName} to ${status}`,
           reason: reason || "",
+          additionalData: {
+            taskId: task.id,
+            taskName: task.taskName,
+            prevStatus: task.status,
+            status
+          },
           triggeredBy: triggeredBy || "RTQ"
         }).catch(errorHandler);
         return updatedTask;
       }).catch((e) => {
         errorHandler(e);
-        logAction({
+        eventHandler({
           timestamp: new Date(),
-          action: `failed changing status of ${task.taskName} to ${status}`,
+          action: RTQAction.MODIFY_TASK_STATUS,
+          message: `failed changing status of ${task.taskName} to ${status}`,
           reason: reason || "",
+          additionalData: {
+            taskId: task.id,
+            taskName: task.taskName,
+            prevStatus: task.status,
+            status
+          },
           triggeredBy: triggeredBy || "RTQ"
         }).catch(errorHandler);
         return null;
@@ -335,13 +361,24 @@ var RTQ = (() => {
       const {
         options: {
           createQueueEntry,
+          eventHandler,
           errorHandler
         }
       } = this;
-      const result = await createQueueEntry({
+      const queryEntry = {
         id: this.uid.stamp(16),
         taskId: task.id,
         queuedAt: new Date()
+      };
+      const result = await createQueueEntry(queryEntry).then(() => {
+        eventHandler({
+          timestamp: new Date(),
+          action: RTQAction.MODIFY_QUEUE,
+          message: `added queue entry ${queryEntry.id} to queue`,
+          reason: "tick",
+          additionalData: queryEntry,
+          triggeredBy: "RTQ"
+        }).catch(errorHandler);
       }).catch((e) => {
         errorHandler(e);
         return null;
@@ -349,7 +386,7 @@ var RTQ = (() => {
       if (result === null) {
         return null;
       }
-      return await this.changeTaskStatus({
+      return await this.modifyTaskStatus({
         task,
         status: RTQStatus.QUEUED
       });
@@ -366,7 +403,7 @@ var RTQ = (() => {
       } = task;
       const msSinceLastRun = Date.now().valueOf() - lastRun.valueOf();
       if (msSinceLastRun < waitTimeBetweenRuns) {
-        await this.changeTaskStatus({
+        await this.modifyTaskStatus({
           task,
           status: RTQStatus.AWAITING_RETRY
         });
@@ -384,7 +421,7 @@ var RTQ = (() => {
         status = RTQStatus.RETRIED;
       }
       let upToDateTask = task;
-      upToDateTask = await this.changeTaskStatus({
+      upToDateTask = await this.modifyTaskStatus({
         task: upToDateTask,
         status,
         retryCount
@@ -392,7 +429,7 @@ var RTQ = (() => {
       if (upToDateTask === null) {
         return;
       }
-      upToDateTask = await this.changeTaskStatus({
+      upToDateTask = await this.modifyTaskStatus({
         task: upToDateTask,
         status: RTQStatus.IN_PROGRESS,
         lastRun: new Date()
@@ -401,7 +438,7 @@ var RTQ = (() => {
         return;
       }
       taskHandlers[taskName](taskOptions).then(async () => {
-        upToDateTask = await this.changeTaskStatus({
+        upToDateTask = await this.modifyTaskStatus({
           task: upToDateTask,
           status: RTQStatus.SUCCEEDED,
           retryCount: 0
@@ -415,7 +452,7 @@ var RTQ = (() => {
           status2 = RTQStatus.FAILED;
         }
         retryCount += 1;
-        upToDateTask = await this.changeTaskStatus({
+        upToDateTask = await this.modifyTaskStatus({
           task: upToDateTask,
           status: status2,
           retryCount,
@@ -436,7 +473,7 @@ var RTQ = (() => {
           fetchQueueEntries,
           removeQueueEntry,
           maxConcurrentTasks,
-          logAction,
+          eventHandler,
           errorHandler
         }
       } = this;
@@ -456,14 +493,25 @@ var RTQ = (() => {
         }
         return a;
       }, []);
-      await Promise.all(filteredEntries.map(async (q) => await removeQueueEntry(q).catch((e) => {
-        errorHandler(e);
-        logAction({
+      await Promise.all(filteredEntries.map(async (q) => await removeQueueEntry(q).then(() => {
+        eventHandler({
           timestamp: new Date(),
-          action: `failed removing queue entry ${q.id} from queue`,
-          reason: e.message || JSON.stringify(e),
+          action: RTQAction.MODIFY_QUEUE,
+          message: `removed queue entry ${q.id} from queue`,
+          reason: "tick",
+          additionalData: q,
           triggeredBy: "RTQ"
         }).catch(errorHandler);
+      }).catch((e) => {
+        eventHandler({
+          timestamp: new Date(),
+          action: RTQAction.MODIFY_QUEUE,
+          message: `failed removing queue entry ${q.id} from queue`,
+          reason: e.message || JSON.stringify(e),
+          additionalData: { error: e },
+          triggeredBy: "RTQ"
+        }).catch(errorHandler);
+        errorHandler(e);
       }))).catch(errorHandler);
       const tasksReadyToProcess = filteredEntries.map((qe) => tasks.find((t) => t.id === qe.taskId));
       const numOfTasksProcessed = tasksReadyToProcess.length;
@@ -485,6 +533,7 @@ var RTQ = (() => {
     }
   };
   RTQ.RTQStatus = RTQStatus;
+  RTQ.version = version;
   return src_exports;
 })();
 //# sourceMappingURL=recurring-task-queue.js.map

@@ -1,6 +1,7 @@
 import ShortUniqueId from 'short-unique-id';
-import { RTQLogEntry, RTQQueueEntry, RTQStatusEnum, RTQTask, RTQTaskHandler } from "./interfaces";
+import { RTQEvent, RTQQueueEntry, RTQStatusEnum, RTQActionEnum, RTQTask, RTQTaskHandler } from "./interfaces";
 export * from "./interfaces";
+export { version } from '../package.json';
 export declare const RTQStatus: {
     NEW: RTQStatusEnum.NEW;
     QUEUED: RTQStatusEnum.QUEUED;
@@ -12,6 +13,10 @@ export declare const RTQStatus: {
     AWAITING_NEXT_RUN: RTQStatusEnum.AWAITING_NEXT_RUN;
     SUCCEEDED: RTQStatusEnum.SUCCEEDED;
 };
+export declare const RTQAction: {
+    MODIFY_TASK_STATUS: RTQActionEnum.MODIFY_TASK_STATUS;
+    MODIFY_QUEUE: RTQActionEnum.MODIFY_QUEUE;
+};
 declare type RTQCustomErrorHandler = (error: any) => Promise<void>;
 interface RTQOptions {
     fetchTasks: () => Promise<RTQTask<unknown>[]>;
@@ -19,10 +24,10 @@ interface RTQOptions {
     createQueueEntry: (queueEntry: RTQQueueEntry) => Promise<void>;
     fetchQueueEntries: () => Promise<RTQQueueEntry[]>;
     removeQueueEntry: (queueEntry: RTQQueueEntry) => Promise<void>;
-    logAction: (logEntry: RTQLogEntry) => Promise<void>;
     taskHandlers: {
         [k: string]: RTQTaskHandler<unknown>;
     };
+    eventHandler: (event: RTQEvent) => Promise<void>;
     errorHandler?: RTQCustomErrorHandler;
     maxConcurrentTasks?: number;
 }
@@ -38,12 +43,13 @@ export default class RTQ {
         AWAITING_NEXT_RUN: RTQStatusEnum.AWAITING_NEXT_RUN;
         SUCCEEDED: RTQStatusEnum.SUCCEEDED;
     };
+    static version: string;
     options: RTQOptions;
     runningTasks: number;
     uid: ShortUniqueId;
     ticking: boolean;
     constructor(options: RTQOptions);
-    changeTaskStatus({ task, status, reason, triggeredBy, retryCount, lastRun, }: {
+    modifyTaskStatus({ task, status, reason, triggeredBy, retryCount, lastRun, }: {
         task: RTQTask<unknown>;
         status: RTQStatusEnum;
         reason?: string;
