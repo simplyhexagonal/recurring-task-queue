@@ -9,10 +9,15 @@ import {
   RTQTaskHandler,
 } from "./interfaces";
 
-export * from "./interfaces";
+// @ts-ignore
+import { version } from '../package.json';
 
-export const RTQStatus = {...RTQStatusEnum};
-export const RTQAction = {...RTQActionEnum};
+export * from "./interfaces";
+// @ts-ignore
+export { version } from '../package.json';
+
+export const RTQStatus = { ...RTQStatusEnum };
+export const RTQAction = { ...RTQActionEnum };
 
 type RTQCustomErrorHandler = (error: any) => Promise<void>;
 
@@ -35,6 +40,7 @@ const defaultOptions: Partial<RTQOptions> = {
 
 export default class RTQ {
   static RTQStatus = RTQStatus;
+  static version = version;
 
   options: RTQOptions;
   runningTasks: number = 0;

@@ -1,8 +1,9 @@
 {
   "name": "@simplyhexagonal/recurring-task-queue",
-  "version": "1.0.0",
+  "version": "0.9.0",
   "description": "Versatile type-safe queueing library for a finite set of recurring user-editable tasks..",
-  "main": "index.js",
+  "main": "dist/recurring-task-queue.js",
+  "types": "dist/recurring-task-queue.d.ts",
   "repository": "https://github.com/simplyhexagonal/recurring-task-queue",
   "author": "Jean M. Lescure",
   "license": "Apache-2.0",
