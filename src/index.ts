@@ -1,9 +1,10 @@
 import ShortUniqueId from 'short-unique-id';
 
 import {
-  RTQLogEntry,
+  RTQEvent,
   RTQQueueEntry,
   RTQStatusEnum,
+  RTQActionEnum,
   RTQTask,
   RTQTaskHandler,
 } from "./interfaces";
@@ -11,6 +12,7 @@ import {
 export * from "./interfaces";
 
 export const RTQStatus = {...RTQStatusEnum};
+export const RTQAction = {...RTQActionEnum};
 
 type RTQCustomErrorHandler = (error: any) => Promise<void>;
 
@@ -20,8 +22,8 @@ interface RTQOptions {
   createQueueEntry: (queueEntry: RTQQueueEntry) => Promise<void>;
   fetchQueueEntries: () => Promise<RTQQueueEntry[]>;
   removeQueueEntry: (queueEntry: RTQQueueEntry) => Promise<void>;
-  logAction: (logEntry: RTQLogEntry) => Promise<void>;
   taskHandlers: {[k: string]: RTQTaskHandler<unknown>};
+  eventHandler: (event: RTQEvent) => Promise<void>;
   errorHandler?: RTQCustomErrorHandler;
   maxConcurrentTasks?: number;
 }
@@ -48,7 +50,7 @@ export default class RTQ {
     this.uid = new ShortUniqueId();
   }
 
-  async changeTaskStatus({
+  async modifyTaskStatus({
     task,
     status,
     reason,
@@ -66,7 +68,7 @@ export default class RTQ {
     const {
       options: {
         updateTask,
-        logAction,
+        eventHandler,
         errorHandler,
       },
     } = this;
@@ -80,10 +82,17 @@ export default class RTQ {
 
     return await updateTask(updatedTask)
       .then(() => {
-        logAction({
+        eventHandler({
           timestamp: new Date(),
-          action: `changed status of ${task.taskName} to ${status}`,
+          action: RTQAction.MODIFY_TASK_STATUS,
+          message: `changed status of ${task.taskName} to ${status}`,
           reason: reason || '',
+          additionalData: {
+            taskId: task.id,
+            taskName: task.taskName,
+            prevStatus: task.status,
+            status,
+          },
           triggeredBy: triggeredBy || 'RTQ',
         }).catch(errorHandler);
 
@@ -92,10 +101,17 @@ export default class RTQ {
       .catch((e) => {
         (errorHandler as RTQCustomErrorHandler)(e);
 
-        logAction({
+        eventHandler({
           timestamp: new Date(),
-          action: `failed changing status of ${task.taskName} to ${status}`,
+          action: RTQAction.MODIFY_TASK_STATUS,
+          message: `failed changing status of ${task.taskName} to ${status}`,
           reason: reason || '',
+          additionalData: {
+            taskId: task.id,
+            taskName: task.taskName,
+            prevStatus: task.status,
+            status,
+          },
           triggeredBy: triggeredBy || 'RTQ',
         }).catch(errorHandler);
 
@@ -111,14 +127,26 @@ export default class RTQ {
     const {
       options: {
         createQueueEntry,
+        eventHandler,
         errorHandler,
       },
     } = this;
 
-    const result = await createQueueEntry({
+    const queryEntry: RTQQueueEntry = {
       id: this.uid.stamp(16),
       taskId: task.id,
       queuedAt: new Date(),
+    };
+
+    const result = await createQueueEntry(queryEntry).then(() => {
+      eventHandler({
+        timestamp: new Date(),
+        action: RTQAction.MODIFY_QUEUE,
+        message: `added queue entry ${queryEntry.id} to queue`,
+        reason: 'tick',
+        additionalData: queryEntry,
+        triggeredBy: 'RTQ',
+      }).catch(errorHandler);
     }).catch(
       (e) => {
         (errorHandler as RTQCustomErrorHandler)(e);
@@ -130,7 +158,7 @@ export default class RTQ {
       return null;
     }
 
-    return await this.changeTaskStatus({
+    return await this.modifyTaskStatus({
       task,
       status: RTQStatus.QUEUED,
     });
@@ -155,7 +183,7 @@ export default class RTQ {
     const msSinceLastRun = (Date.now().valueOf() - lastRun.valueOf());
 
     if (msSinceLastRun < waitTimeBetweenRuns) {
-      await this.changeTaskStatus({
+      await this.modifyTaskStatus({
         task: task,
         status: RTQStatus.AWAITING_RETRY,
       });
@@ -179,7 +207,7 @@ export default class RTQ {
 
     let upToDateTask: RTQTask<unknown> | null = task;
 
-    upToDateTask = await this.changeTaskStatus({
+    upToDateTask = await this.modifyTaskStatus({
       task: upToDateTask,
       status,
       retryCount,
@@ -189,7 +217,7 @@ export default class RTQ {
       return;
     }
 
-    upToDateTask = await this.changeTaskStatus({
+    upToDateTask = await this.modifyTaskStatus({
       task: upToDateTask,
       status: RTQStatus.IN_PROGRESS,
       lastRun: new Date(),
@@ -201,7 +229,7 @@ export default class RTQ {
 
     taskHandlers[taskName](taskOptions)
       .then(async () => {
-        upToDateTask = await this.changeTaskStatus({
+        upToDateTask = await this.modifyTaskStatus({
           task: (upToDateTask as RTQTask<unknown>),
           status: RTQStatus.SUCCEEDED,
           retryCount: 0,
@@ -220,7 +248,7 @@ export default class RTQ {
 
         retryCount += 1;
 
-        upToDateTask = await this.changeTaskStatus({
+        upToDateTask = await this.modifyTaskStatus({
           task: (upToDateTask as RTQTask<unknown>),
           status,
           retryCount,
@@ -245,7 +273,7 @@ export default class RTQ {
         fetchQueueEntries,
         removeQueueEntry,
         maxConcurrentTasks,
-        logAction,
+        eventHandler,
         errorHandler,
       }
     } = this;
@@ -274,15 +302,26 @@ export default class RTQ {
 
     await Promise.all(
       filteredEntries.map(
-        async (q) => await removeQueueEntry(q).catch((e) => {
-          (errorHandler as RTQCustomErrorHandler)(e);
-
-          logAction({
+        async (q) => await removeQueueEntry(q).then(() => {
+          eventHandler({
             timestamp: new Date(),
-            action: `failed removing queue entry ${q.id} from queue`,
-            reason: e.message || JSON.stringify(e),
+            action: RTQAction.MODIFY_QUEUE,
+            message: `removed queue entry ${q.id} from queue`,
+            reason: 'tick',
+            additionalData: q,
             triggeredBy: 'RTQ',
           }).catch(errorHandler);
+        }).catch((e) => {
+          eventHandler({
+            timestamp: new Date(),
+            action: RTQAction.MODIFY_QUEUE,
+            message: `failed removing queue entry ${q.id} from queue`,
+            reason: e.message || JSON.stringify(e),
+            additionalData: {error: e},
+            triggeredBy: 'RTQ',
+          }).catch(errorHandler);
+
+          (errorHandler as RTQCustomErrorHandler)(e);
         })
       )
     ).catch(errorHandler);

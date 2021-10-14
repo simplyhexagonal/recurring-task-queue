@@ -1,5 +1,5 @@
 import RTQ, {
-  RTQLogEntry,
+  RTQEvent,
   RTQQueueEntry,
   RTQStatus,
   RTQTask,
@@ -19,7 +19,7 @@ interface helloTaskOptions {
   arrivingUser: string;
 }
 
-const helloTask: RTQTaskHandler<helloTaskOptions> = async (taskOptions) => {
+const helloTaskHandler: RTQTaskHandler<helloTaskOptions> = async (taskOptions) => {
   await sleep(100);
 
   taskRunCounts.hello += 1;
@@ -33,7 +33,7 @@ interface goodbyeTaskOptions {
   departingUser: string;
 }
 
-const goodbyeTask: RTQTaskHandler<goodbyeTaskOptions> = async (taskOptions) => {
+const goodbyeTaskHandler: RTQTaskHandler<goodbyeTaskOptions> = async (taskOptions) => {
   await sleep(100);
 
   taskRunCounts.goodbye += 1;
@@ -45,7 +45,7 @@ const goodbyeTask: RTQTaskHandler<goodbyeTaskOptions> = async (taskOptions) => {
 
 const errorMessage = 'this error will always happen';
 
-const errorTask: RTQTaskHandler<{}> = async () => {
+const errorTaskHandler: RTQTaskHandler<{}> = async () => {
   taskRunCounts.error += 1;
 
   throw new Error(errorMessage);
@@ -55,7 +55,7 @@ let errorOnce = false;
 
 const errorOnceMessage = 'this error will happen once';
 
-const errorOnceTask: RTQTaskHandler<{}> = async () => {
+const errorOnceTaskHandler: RTQTaskHandler<{}> = async () => {
   await sleep(100);
 
   taskRunCounts.errorOnce += 1;
@@ -159,15 +159,15 @@ const removeQueueEntry = async (queueEntry: RTQQueueEntry) => {
   }
 };
 
-const logAction = async (logEntry: RTQLogEntry) => {
-  console.info(logEntry);
+const eventHandler = async (event: RTQEvent) => {
+  console.info(event);
 };
 
 const taskHandlers: {[k: string]: RTQTaskHandler<allTaskOptions>} = {
-  hello: helloTask,
-  goodbye: goodbyeTask,
-  error: errorTask,
-  errorOnce: errorOnceTask,
+  hello: helloTaskHandler,
+  goodbye: goodbyeTaskHandler,
+  error: errorTaskHandler,
+  errorOnce: errorOnceTaskHandler,
 };
 
 const mockErrorHandler = jest.fn();
@@ -186,7 +186,7 @@ describe('Recurring Task Queue', () => {
       createQueueEntry,
       fetchQueueEntries,
       removeQueueEntry,
-      logAction,
+      eventHandler,
       taskHandlers,
     });
 
@@ -298,7 +298,7 @@ describe('Recurring Task Queue', () => {
       createQueueEntry: async (qe) => {errorQueue.push(qe);},
       fetchQueueEntries: async () => errorQueue,
       removeQueueEntry: async () => {errorQueue.pop()},
-      logAction,
+      eventHandler,
       taskHandlers,
       errorHandler,
     });
@@ -321,7 +321,7 @@ describe('Recurring Task Queue', () => {
       },
       fetchQueueEntries,
       removeQueueEntry,
-      logAction,
+      eventHandler,
       updateTask,
       createQueueEntry,
       taskHandlers,
@@ -342,7 +342,7 @@ describe('Recurring Task Queue', () => {
         throw 'fetchQueueEntries';
       },
       removeQueueEntry,
-      logAction,
+      eventHandler,
       updateTask,
       createQueueEntry,
       taskHandlers,
@@ -361,7 +361,7 @@ describe('Recurring Task Queue', () => {
       removeQueueEntry: async () => {
         throw 'removeQueueEntry';
       },
-      logAction,
+      eventHandler,
       updateTask,
       createQueueEntry,
       taskHandlers,
@@ -380,8 +380,8 @@ describe('Recurring Task Queue', () => {
       fetchTasks,
       fetchQueueEntries,
       removeQueueEntry,
-      logAction: async () => {
-        throw 'logAction';
+      eventHandler: async () => {
+        throw 'eventHandler';
       },
       updateTask,
       createQueueEntry,
@@ -391,7 +391,7 @@ describe('Recurring Task Queue', () => {
 
     await recurring.tick();
 
-    expect(errHandler).toHaveBeenCalledWith('logAction');
+    expect(errHandler).toHaveBeenCalledWith('eventHandler');
 
     errHandler = jest.fn();
 
@@ -399,7 +399,7 @@ describe('Recurring Task Queue', () => {
       fetchTasks: fetchMockTasks,
       fetchQueueEntries,
       removeQueueEntry,
-      logAction,
+      eventHandler,
       updateTask: async () => {
         throw 'updateTask';
       },
@@ -420,7 +420,7 @@ describe('Recurring Task Queue', () => {
       fetchTasks: fetchMockTasks,
       fetchQueueEntries: async () => [],
       removeQueueEntry,
-      logAction,
+      eventHandler,
       updateTask,
       createQueueEntry: async () => {
         throw 'createQueueEntry';

@@ -70,8 +70,8 @@ const removeQueueEntry = async (queueEntry) => {
   }
 };
 
-const logAction = async (logEntry) => {
-  console.info(logEntry);
+const eventHandler = async (event) => {
+  console.info(event);
 };
 
 const taskHandlers = {
@@ -85,7 +85,7 @@ const recurring = new RTQ({
   createQueueEntry,
   fetchQueueEntries,
   removeQueueEntry,
-  logAction,
+  eventHandler,
   taskHandlers,
 });
 

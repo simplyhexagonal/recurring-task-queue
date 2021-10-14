@@ -31,10 +31,17 @@ export interface RTQQueueEntry {
   queuedAt: Date;
 }
 
-export interface RTQLogEntry {
+export enum RTQActionEnum {
+  MODIFY_TASK_STATUS = 'MODIFY_TASK_STATUS',
+  MODIFY_QUEUE = 'MODIFY_QUEUE',
+}
+
+export interface RTQEvent {
   timestamp: Date;
-  action: string;
+  action: RTQActionEnum;
+  message: string;
   reason: string;
+  additionalData: {[k: string]: any};
   triggeredBy: string;
 }
 

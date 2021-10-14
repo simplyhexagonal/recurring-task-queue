@@ -1,7 +1,7 @@
 import { createServer, IncomingMessage, ServerResponse } from 'http';
 
 import RTQ, {
-  RTQLogEntry,
+  RTQEvent,
   RTQQueueEntry,
   RTQStatus,
   RTQTask,
@@ -86,8 +86,8 @@ const removeQueueEntry = async (queueEntry: RTQQueueEntry) => {
   }
 };
 
-const logAction = async (logEntry: RTQLogEntry) => {
-  console.info(logEntry);
+const eventHandler = async (event: RTQEvent) => {
+  console.info(event);
 };
 
 const taskHandlers: {[k: string]: RTQTaskHandler<allTaskOptions>} = {
@@ -101,7 +101,7 @@ const recurring = new RTQ({
   createQueueEntry,
   fetchQueueEntries,
   removeQueueEntry,
-  logAction,
+  eventHandler,
   taskHandlers,
 });
 
