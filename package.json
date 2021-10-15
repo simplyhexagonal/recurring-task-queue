@@ -1,6 +1,6 @@
 {
   "name": "@simplyhexagonal/recurring-task-queue",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Versatile type-safe queueing library for a finite set of recurring user-editable tasks..",
   "main": "dist/recurring-task-queue.js",
   "types": "dist/recurring-task-queue.d.ts",
