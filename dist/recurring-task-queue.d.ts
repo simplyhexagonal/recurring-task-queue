@@ -1,4 +1,3 @@
-import ShortUniqueId from 'short-unique-id';
 import { RTQEvent, RTQQueueEntry, RTQStatusEnum, RTQActionEnum, RTQTask, RTQTaskHandler } from "./interfaces";
 export * from "./interfaces";
 export { version } from '../package.json';
@@ -46,7 +45,7 @@ export default class RTQ {
     static version: string;
     options: RTQOptions;
     runningTasks: number;
-    uid: ShortUniqueId;
+    uid: any;
     ticking: boolean;
     constructor(options: RTQOptions);
     modifyTaskStatus({ task, status, reason, triggeredBy, retryCount, lastRun, }: {
