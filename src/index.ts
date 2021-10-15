@@ -1,5 +1,3 @@
-import ShortUniqueId from 'short-unique-id';
-
 import {
   RTQEvent,
   RTQQueueEntry,
@@ -18,6 +16,15 @@ export { version } from '../package.json';
 
 export const RTQStatus = { ...RTQStatusEnum };
 export const RTQAction = { ...RTQActionEnum };
+
+
+let ShortUniqueId: any;
+
+if (typeof window !== 'undefined')  {
+  ShortUniqueId = (window as any).ShortUniqueId;
+} else {
+  ShortUniqueId = require('short-unique-id');
+}
 
 type RTQCustomErrorHandler = (error: any) => Promise<void>;
 
@@ -44,7 +51,7 @@ export default class RTQ {
 
   options: RTQOptions;
   runningTasks: number = 0;
-  uid: ShortUniqueId;
+  uid: any;
   ticking: boolean = false;
   
   constructor(options: RTQOptions) {
